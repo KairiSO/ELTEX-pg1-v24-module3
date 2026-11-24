@@ -1,0 +1,10 @@
+*.o
+file_copier
+*.copy
+*.in
+*.out
+.git
+.gitignore
+*.md
+.vscode
+.idea

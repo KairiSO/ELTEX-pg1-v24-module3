@@ -1,0 +1,9 @@
+services:
+  file_copier:
+    build: .
+    # По умолчанию запускаем тесты
+    command: ["bash", "-c", "/app/test.sh"]
+    volumes:
+      # Пробрасываем папку с тестовыми файлами, чтобы видеть .copy на хосте
+      - ./workspace:/workspace
+    working_dir: /workspace
