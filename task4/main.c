@@ -66,7 +66,27 @@ void producer_routine(void *shm, sem_t *sem)
             printf("Producer finished, memory exhausted\n");
             break;
         }
-        // something, idk
+        //we need to get pointer to the new block
+        ShmDataBlock *new_block = (ShmDataBlock *)get_ptr(shm, new_block_offset);
+        new_block->count = num_elements;
+        new_block->next_block_offset = 0;
+        for (int i = 0; i < num_elements; i++)
+        {
+            //we need to fill the data array with random values
+            new_block->data[i] = rand() % 1000;
+        }
+        //now we need to insert the new block into the linked list
+        if (header->first_block_offset == 0)
+        {
+            header->first_block_offset = new_block_offset;
+        }
+        else
+        {
+            ShmDataBlock *last_block = (ShmDataBlock *)get_ptr(shm, header->last_block_offset);
+            last_block->next_block_offset = new_block_offset;
+        }
+        header->last_block_offset = new_block_offset;
+        header->free_block_offset = new_block_offset + sizeof(ShmDataBlock);
 
         sem_post(sem); // Release the semaphore after finishing production
         printf("Producer finished writing in block of %d elements\n", num_elements);
@@ -94,7 +114,21 @@ void consumer_routine(void *shm, sem_t *sem)
 
             if(block->count > 0)
             {
-                //idk, maybe process the data in the block
+                //we need to find min and max values in the block
+                int min = block->data[0];
+                int max = block->data[0];
+                for (int i = 1; i < block->count; i++)
+                {
+                    if (block->data[i] < min)
+                    {
+                        min = block->data[i];
+                    }
+                    if (block->data[i] > max)
+                    {
+                        max = block->data[i];
+                    }
+                }
+                printf("[Consumer PID: %d] Block offset %d: Min = %d, Max = %d\n", getpid(), current_block_offset, min, max);
                 block->count = 0;
                 processed_any = 1;
                 break;
@@ -128,12 +162,12 @@ void consumer_routine(void *shm, sem_t *sem)
 
         if(!processed_any)
         {
-            printf("No data available\n");
+            printf("[Consumer PID: %d] No data available\n", getpid());
             sleep(1); // Wait for data to be available
         }
         else
         {
-            printf("Data processed\n");
+            printf("[Consumer PID: %d] Data processed\n", getpid());
             sleep(1); // Simulate some work after consuming data
         }
     }
