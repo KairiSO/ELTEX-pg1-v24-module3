@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <semaphore.h>
+#include <sys/mman.h>
 #include <time.h>
 
 #define SHM_SIZE 4096
@@ -140,8 +141,93 @@ void consumer_routine(void *shm, sem_t *sem)
     printf("[Consumer PID: %d] finished\n", getpid());
 }
 
-int main(int argc, char **argv)
+void* setup_shared_memory(int* fd_out)
 {
-    printf("Hello, World!\n");
+    int fd = shm_open("/my_shm", O_CREAT | O_RDWR, 0666);
+    if(fd == -1)
+    {
+        perror("shm_open failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if(ftruncate(fd, SHM_SIZE) == -1)
+    {
+        perror("ftruncate failed");
+        exit(EXIT_FAILURE);
+    }
+    void *shm = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if(shm == MAP_FAILED)
+    {
+        perror("mmap failed");
+        exit(EXIT_FAILURE);
+    }
+
+    *fd_out = fd;
+    return shm;
+}
+
+//need to open POSIX semaphore
+sem_t* setup_semaphore(int is_first)
+{
+    sem_t *sem;
+    if(is_first)
+    {
+        sem = sem_open("/my_sem", O_CREAT, 0666, 1);
+    }
+    else
+    {
+        sem = sem_open("/my_sem", 0);
+    }
+    if(sem == SEM_FAILED)
+    {
+        perror("sem_open failed");
+        exit(EXIT_FAILURE);
+    }
+    return sem;
+}
+
+int main(int argc, char *argv[])
+{
+    if(argc < 2)
+    {
+        printf("Usage: %s <producer|consumer>\n", argv[0]);
+        return 1;
+    }
+
+    int is_producer = (strcmp(argv[1], "producer") == 0);
+    int shm_fd;
+    void *shm = setup_shared_memory(&shm_fd);
+    if(is_producer)
+    {
+        ShmHeader *header = (ShmHeader *)shm;
+        if(header->free_block_offset == 0)
+        {
+            header->first_block_offset = 0;
+            header->last_block_offset = 0;
+            header->producer_finished = 0;
+            header->free_block_offset = sizeof(ShmHeader);
+        }
+    }
+
+    sem_t *sem = setup_semaphore(is_producer);
+
+    if(is_producer)
+    {
+        producer_routine(shm, sem);
+    }
+    else
+    {
+        consumer_routine(shm, sem);
+    }
+
+    // Cleanup shared memory and semaphore
+    munmap(shm, SHM_SIZE);
+    close(shm_fd);
+    sem_close(sem);
+    if(is_producer)
+    {
+        sem_unlink("/my_sem");
+        shm_unlink("/my_shm");
+    }
     return 0;
 }
