@@ -69,6 +69,7 @@ int run_parent(ChannelHandles *h, char **filenames, int num_files)
             fprintf(stderr, "[parent] File not found: %s\n", fname);
             continue;
         }
+        
         ssize_t fsize = get_file_size(fname);
         if (fsize < 0)
         {

@@ -1,0 +1,14 @@
+*.o
+*.out
+*.exe
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.obj
+*.pdb
+*.log
+*.tmp
+*.bak
+*.swp

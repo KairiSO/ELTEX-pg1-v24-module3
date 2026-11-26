@@ -2,6 +2,9 @@
 #include "broker.h"
 #include "publisher.h"
 #include "subscriber.h"
+#include <stdio.h>
+#include <string.h>
+
 
 static void usage(const char *prog)
 {
