@@ -47,6 +47,15 @@ void *get_ptr(void *shm, int offset)
     return (char *)shm + offset;
 }
 
+/*
+Shared memory is divided into a header and a sequence of data blocks.
+The header stores the offsets of the first and last blocks, the offset of
+the next free block, and a flag indicating whether the producer has finished.
+Each block contains a size field followed by its data. The producer appends
+new blocks at the free-block offset and updates the last-block offset. The
+consumer follows the first-block offset through the block chain to read data.
+*/
+
 void producer_routine(void *shm, sem_t *sem)
 {
     ShmHeader *header = (ShmHeader *)shm;
@@ -90,7 +99,7 @@ void producer_routine(void *shm, sem_t *sem)
 
         sem_post(sem); // Release the semaphore after finishing production
         printf("Producer finished writing in block of %d elements\n", num_elements);
-        sleep(1); // Simulate some work after producing data
+        sleep(2); // Simulate some work after producing data
     }
 
     printf("[Producer PID: %d] finished\n", getpid());
@@ -102,6 +111,11 @@ void consumer_routine(void *shm, sem_t *sem)
     printf("[Consumer PID: %d] started\n", getpid());
 
     while (!header->producer_finished)
+    /*
+    This loop continues until the producer has finished.
+    Each iteration waits for the semaphore, processes the first non-empty block,
+    and checks if all blocks have been processed.
+    */
     {
         sem_wait(sem); // Wait for the semaphore before consuming data
 
@@ -174,7 +188,12 @@ void consumer_routine(void *shm, sem_t *sem)
 
     printf("[Consumer PID: %d] finished\n", getpid());
 }
-
+/*
+setup_shared_memory creates a POSIX shared memory object, sets its size,
+and maps it into the process address space using mmap. The file descriptor
+is returned through fd_out, and the mapped address is returned as the
+function's result.
+*/
 void* setup_shared_memory(int* fd_out)
 {
     int fd = shm_open("/my_shm", O_CREAT | O_RDWR, 0666);
@@ -265,3 +284,24 @@ int main(int argc, char *argv[])
     }
     return 0;
 }
+
+/*
+README.md
+
+This program demonstrates inter-process communication using shared memory and POSIX semaphores.
+
+Usage:
+    ./program producer
+    ./program consumer
+
+Functionality:
+    - Producer: Writes data to shared memory.
+    - Consumer: Reads data from shared memory.
+    - Shared memory is used to exchange data between producer and consumer.
+    - POSIX semaphore is used to synchronize access to shared memory.
+
+Notes:
+    - The producer must be started first to initialize the shared memory and semaphore.
+    - The consumer can be started multiple times to read data from shared memory.
+    - Cleanup of shared memory and semaphore is handled by the producer.
+*/
