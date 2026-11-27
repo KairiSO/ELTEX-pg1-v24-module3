@@ -12,21 +12,13 @@
 */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
 #include <string.h>
-#include <errno.h>
-#include <semaphore.h>
-#include <sys/mman.h>
-#include <time.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h>
 #include <signal.h>
+#include <sys/select.h>
 
 
 #define CHAT_PORT 12345
@@ -120,7 +112,7 @@ static int create_udp_socket(void)
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htol(INADDR_ANY);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(CHAT_PORT);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
@@ -140,7 +132,45 @@ static int create_udp_socket(void)
 
 static void chat_loop(void)
 {
-    // Основной цикл чата будет реализован здесь.
+    char inbuf[BUF_SIZE];
+
+    while (g_running)
+    {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(g_sockfd, &readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+
+        int ready = select(g_sockfd + 1, &readfds, NULL, NULL, NULL);
+        if (ready < 0)
+        {
+            perror("select");
+            break;
+        }
+
+        if (FD_ISSET(g_sockfd, &readfds))
+        {
+            ssize_t len = recv(g_sockfd, inbuf, sizeof(inbuf), 0);
+            if (len > 0)
+            {
+                inbuf[len] = '\0';
+                printf("%s\n", inbuf);
+            }
+        }
+
+        if (FD_ISSET(STDIN_FILENO, &readfds))
+        {
+            if (fgets(inbuf, sizeof(inbuf), stdin) != NULL)
+            {
+                size_t len = strlen(inbuf);
+                if (len > 0 && inbuf[len - 1] == '\n')
+                {
+                    inbuf[len - 1] = '\0';
+                }
+                send_chat_message(inbuf);
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -160,7 +190,17 @@ int main(int argc, char *argv[])
     {
         return 1;
     }
+    printf("Chat is started, Name: %s, Port: %d\n", g_username, CHAT_PORT);
+    printf("For exit, press Ctrl+C\n");
+    fflush(stdout);
+
+    send_service_message(JOIN_PREFIX);
+
     chat_loop();
+
+    send_service_message(LEAVE_PREFIX);
+
     close(g_sockfd);
+    printf("Chat is ended\n");
     return 0;
 }
